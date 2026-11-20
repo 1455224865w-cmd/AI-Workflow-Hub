@@ -96,3 +96,45 @@ edges:
     assert response.status_code == 200
     assert response.json()["order"] == ["start", "end"]
     assert response.json()["executed"] is False
+
+
+def test_dry_run_shows_shell_without_executing_it():
+    workflow = parse_workflow("""
+    name: risky
+    version: 1
+    nodes:
+      - {id: start, type: start}
+      - id: wait
+        type: delay
+        config: {seconds: 0, timeout_seconds: 5}
+      - id: cmd
+        type: shell
+        config: {command: "rm -rf /", timeout_seconds: 5}
+      - {id: end, type: end}
+    edges:
+      - {from: start, to: wait}
+      - {from: wait, to: cmd}
+      - {from: cmd, to: end}
+    """)
+    plan = dry_run(workflow)
+    assert [step["type"] for step in plan["steps"]] == ["start", "delay", "shell", "end"]
+    assert plan["executed"] is False
+    assert plan["shell_executed"] is False
+    result = execute(workflow)
+    assert result["shell_executed"] is False
+    assert result["status"] == "succeeded"
+    negative = parse_workflow("""
+    name: bad-wait
+    version: 1
+    nodes:
+      - {id: start, type: start}
+      - id: wait
+        type: delay
+        config: {seconds: -1, timeout_seconds: 5}
+      - {id: end, type: end}
+    edges:
+      - {from: start, to: wait}
+      - {from: wait, to: end}
+    """)
+    failed = execute(negative)
+    assert failed["status"] == "failed"

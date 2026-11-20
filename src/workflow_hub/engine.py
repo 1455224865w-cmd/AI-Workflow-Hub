@@ -158,6 +158,7 @@ def dry_run(workflow: dict) -> dict:
     return {
         "name": workflow["name"],
         "order": order,
+        "steps": [{"id": node_id, "type": nodes[node_id]["type"]} for node_id in order],
         "node_count": len(nodes),
         "executed": False,
         "network": False,
@@ -268,6 +269,8 @@ def _run_node(node, context, transport, resolver, approvals, provider=None):
         return {"finished": True}
     if kind == "delay":
         seconds = float(config.get("seconds") or 0)
+        if seconds < 0:
+            raise WorkflowError("等待时间不能为负")
         if seconds > timeout:
             raise WorkflowError("节点超时")
         return {"delayed": seconds}
