@@ -12,7 +12,7 @@ import yaml
 from workflow_hub.expr import ExprError, evaluate
 
 MAX_CONTEXT_BYTES = 16384
-KNOWN = {"start", "end", "http", "script", "condition", "delay", "approval", "shell"}
+KNOWN = {"start", "end", "http", "script", "condition", "delay", "approval", "shell", "agent"}
 
 
 class WorkflowError(ValueError):
@@ -124,7 +124,7 @@ def _context_size(context: dict) -> None:
         raise WorkflowError("上下文超过 16384 字节")
 
 
-def execute(workflow: dict, inputs: dict | None = None, transport=None, resolver=None, approvals=None, prior=None) -> dict:
+def execute(workflow: dict, inputs: dict | None = None, transport=None, resolver=None, approvals=None, prior=None, provider=None) -> dict:
     validate(workflow)
     context = dict(inputs or {})
     _context_size(context)
@@ -169,7 +169,7 @@ def execute(workflow: dict, inputs: dict | None = None, transport=None, resolver
             config = node.get("config") or {}
             retry = int((config.get("retry") or {}).get("max") or 0)
             try:
-                output = _run_node(node, context, transport, resolver, approvals)
+                output = _run_node(node, context, transport, resolver, approvals, provider)
                 attempts[node_id] += 1
                 states[node_id] = "succeeded"
                 completed.add(node_id)
@@ -214,7 +214,7 @@ def _activate(node, output, edges, activated) -> None:
         activated.add(edge["to"])
 
 
-def _run_node(node, context, transport, resolver, approvals):
+def _run_node(node, context, transport, resolver, approvals, provider=None):
     kind = node["type"]
     config = node.get("config") or {}
     timeout = float(config.get("timeout_seconds", 30))
@@ -248,6 +248,11 @@ def _run_node(node, context, transport, resolver, approvals):
         if not approvals.get(node["id"]):
             raise WorkflowError(f"等待审批:{node['id']}")
         return {"approved": True}
+    if kind == "agent":
+        if provider is None:
+            raise WorkflowError("没有配置模型提供方，已拒绝发送请求")
+        prompt = str(config.get("prompt") or "")
+        return {"text": provider.complete(prompt)}
     if kind == "http":
         url = config.get("url") or ""
         assert_public_url(url, resolver or _default_resolver)

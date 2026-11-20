@@ -1,0 +1,17 @@
+name: release-notes
+version: 1
+nodes:
+  - id: start
+    type: start
+  - id: gate
+    type: condition
+    config:
+      expression: "ready == true"
+  - id: publish
+    type: end
+  - id: hold
+    type: end
+edges:
+  - {from: start, to: gate}
+  - {from: gate, to: publish, when: "true"}
+  - {from: gate, to: hold, when: "false"}
