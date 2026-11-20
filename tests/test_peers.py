@@ -138,3 +138,29 @@ def test_dry_run_shows_shell_without_executing_it():
     """)
     failed = execute(negative)
     assert failed["status"] == "failed"
+
+
+def test_run_can_be_reopened_from_sqlite(tmp_path):
+    from fastapi.testclient import TestClient
+    from workflow_hub.api import create_app
+
+    db = str(tmp_path / "runs.sqlite3")
+    yaml = """
+name: pause
+version: 1
+nodes:
+  - {id: start, type: start}
+  - {id: review, type: approval}
+  - {id: end, type: end}
+edges:
+  - {from: start, to: review}
+  - {from: review, to: end}
+"""
+    first = TestClient(create_app(db))
+    created = first.post("/api/runs", json={"yaml": yaml})
+    assert created.json()["result"]["status"] == "paused"
+    second = TestClient(create_app(db))
+    resumed = second.post(f"/api/runs/{created.json()['id']}/resume", json={"approvals": {"review": True}})
+    assert resumed.status_code == 200
+    assert resumed.json()["result"]["status"] == "succeeded"
+    assert resumed.json()["result"]["shell_executed"] is False

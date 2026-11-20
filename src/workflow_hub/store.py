@@ -8,7 +8,7 @@ import sqlite3
 
 class RunStore:
     def __init__(self, path: str):
-        self.conn = sqlite3.connect(path)
+        self.conn = sqlite3.connect(path, check_same_thread=False)
         self.conn.execute("CREATE TABLE IF NOT EXISTS runs (id TEXT PRIMARY KEY, payload TEXT NOT NULL)")
         self.conn.commit()
 

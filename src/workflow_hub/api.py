@@ -1,4 +1,4 @@
-"""校验并运行工作流。运行记录只留在当前进程。"""
+"""校验并运行工作流。传入数据库路径时，运行记录可以在新进程里打开。"""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from workflow_hub.engine import SecurityError, WorkflowError, dry_run, execute, parse_workflow
+from workflow_hub.store import RunStore
 
 
 class WorkflowIn(BaseModel):
@@ -19,9 +20,23 @@ class ResumeIn(BaseModel):
     approvals: dict = Field(default_factory=dict)
 
 
-def create_app() -> FastAPI:
+def create_app(db_path: str | None = None) -> FastAPI:
     app = FastAPI(title="AI Workflow Hub", version="0.1.0")
     app.state.runs = {}
+    app.state.store = RunStore(db_path) if db_path else None
+
+    def remember(run_id: str, payload: dict) -> None:
+        app.state.runs[run_id] = payload
+        if app.state.store is not None:
+            app.state.store.save(run_id, payload)
+
+    def load(run_id: str) -> dict | None:
+        saved = app.state.runs.get(run_id)
+        if saved is None and app.state.store is not None:
+            saved = app.state.store.get(run_id)
+            if saved is not None:
+                app.state.runs[run_id] = saved
+        return saved
 
     @app.get("/api/health")
     def health():
@@ -51,12 +66,12 @@ def create_app() -> FastAPI:
         except (WorkflowError, SecurityError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         run_id = uuid.uuid4().hex
-        app.state.runs[run_id] = {"workflow": workflow, "inputs": body.inputs, "result": result}
+        remember(run_id, {"workflow": workflow, "inputs": body.inputs, "result": result})
         return {"id": run_id, "result": result}
 
     @app.post("/api/runs/{run_id}/resume")
     def resume(run_id: str, body: ResumeIn):
-        saved = app.state.runs.get(run_id)
+        saved = load(run_id)
         if saved is None:
             raise HTTPException(status_code=404, detail="运行记录不存在")
         prior = {
@@ -75,6 +90,7 @@ def create_app() -> FastAPI:
         except (WorkflowError, SecurityError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         saved["result"] = result
+        remember(run_id, saved)
         return {"id": run_id, "result": result}
 
     return app
