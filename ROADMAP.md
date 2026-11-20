@@ -25,3 +25,7 @@ YAML 校验、条件、受限 script、HTTP 防护、重试、超时、审批暂
 ## 暂不做
 
 可视化编辑器、并行节点和分布式执行。
+
+## 0.1.2
+
+借鉴 [FlowRun](https://github.com/runboktu/FlowRun) 的空跑计划，以及 Windmill 把拒绝和等待区分开的做法。空跑不访问网络；明确拒绝会使本次运行失败。

@@ -124,6 +124,35 @@ def _context_size(context: dict) -> None:
         raise WorkflowError("上下文超过 16384 字节")
 
 
+def dry_run(workflow: dict) -> dict:
+    """只给出依赖顺序。不调用 HTTP、模型、Shell，也不读取审批结果。"""
+    validate(workflow)
+    nodes = {node["id"]: node for node in workflow["nodes"]}
+    incoming = {node_id: 0 for node_id in nodes}
+    outgoing = defaultdict(list)
+    for edge in workflow.get("edges") or []:
+        outgoing[edge["from"]].append(edge["to"])
+        incoming[edge["to"]] += 1
+    start = next(node["id"] for node in workflow["nodes"] if node["type"] == "start")
+    ready = sorted((node_id for node_id, count in incoming.items() if count == 0), key=lambda item: (item != start, item))
+    order = []
+    while ready:
+        node_id = ready.pop(0)
+        order.append(node_id)
+        for nxt in outgoing[node_id]:
+            incoming[nxt] -= 1
+            if incoming[nxt] == 0:
+                ready.append(nxt)
+    return {
+        "name": workflow["name"],
+        "order": order,
+        "node_count": len(nodes),
+        "executed": False,
+        "network": False,
+        "shell_executed": False,
+    }
+
+
 def execute(workflow: dict, inputs: dict | None = None, transport=None, resolver=None, approvals=None, prior=None, provider=None) -> dict:
     validate(workflow)
     context = dict(inputs or {})
@@ -245,9 +274,17 @@ def _run_node(node, context, transport, resolver, approvals, provider=None):
     if kind == "shell":
         return {"executed": False, "status": "pending_approval"}
     if kind == "approval":
-        if not approvals.get(node["id"]):
-            raise WorkflowError(f"等待审批:{node['id']}")
-        return {"approved": True}
+        decision = approvals.get(node["id"])
+        if isinstance(decision, dict):
+            if decision.get("approved") is True:
+                return {"approved": True, "by": str(decision.get("by") or "")}
+            if decision.get("approved") is False:
+                raise NodeFailed("审批被拒绝")
+        if decision is True:
+            return {"approved": True, "by": ""}
+        if decision is False:
+            raise NodeFailed("审批被拒绝")
+        raise WorkflowError(f"等待审批:{node['id']}")
     if kind == "agent":
         if provider is None:
             raise WorkflowError("没有配置模型提供方，已拒绝发送请求")
