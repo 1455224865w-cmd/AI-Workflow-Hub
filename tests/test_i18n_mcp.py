@@ -37,4 +37,7 @@ def test_english_validation_and_dry_run_does_not_execute():
     assert [step["type"] for step in payload["steps"]] == ["start", "shell", "end"]
     assert "does not call HTTP" in payload["message"]
     text = (ROOT / "spring-ai" / "application-mcp.yml").read_text(encoding="utf-8")
-    assert "streamable-http:" in text and "endpoint: /mcp" in text
+    sample = (ROOT / "nacos" / "spring-mcp.yaml").read_text(encoding="utf-8")
+    assert "nacos:" in text
+    assert "127.0.0.1" not in text
+    assert "${MCP_SERVICE_URL}" in sample

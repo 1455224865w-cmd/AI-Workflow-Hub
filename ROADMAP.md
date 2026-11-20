@@ -45,3 +45,7 @@ YAML 校验、条件、受限 script、HTTP 防护、重试、超时、审批暂
 ## 0.1.6
 
 Spring AI 通过 MCP 做空跑。空跑不访问网络。
+
+## 0.1.7
+
+配置从 Nacos 读取。镜像由 GitHub Actions 发布到 GHCR。
