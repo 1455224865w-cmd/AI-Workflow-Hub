@@ -21,7 +21,9 @@ edges:
     when: "true"
 ```
 
-节点类型：`start`、`end`、`condition`、`script`、`http`、`delay`、`approval`、`shell`。
+可选的 `inputs` 是列表。每一项要有合法标识符 `name`。`required: true` 的输入在执行前必须出现；空跑只检查定义，不要求已经赋值。
+
+节点类型：`start`、`end`、`condition`、`script`、`http`、`delay`、`approval`、`shell`、`agent`。
 
 `script.config.action` 只能是 `set`，并提供合法的 `key`。`http.config.url` 必须是 http 或 https，目标地址不能是内网。`shell` 不执行 `command`。`delay` 的 `seconds` 大于 `timeout_seconds` 时失败。`retry.max` 是额外重试次数，最大 5。
 

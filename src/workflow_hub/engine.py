@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import re
 from collections import defaultdict
 from urllib.parse import urlparse
 
@@ -60,6 +61,17 @@ def validate(data: dict) -> None:
         ids.append(node["id"])
     if len(ids) != len(set(ids)):
         raise WorkflowError("节点 id 不能重复")
+    declared = data.get("inputs") or []
+    if not isinstance(declared, list):
+        raise WorkflowError("inputs 必须是列表")
+    input_names = []
+    for item in declared:
+        name = item.get("name") if isinstance(item, dict) else None
+        if not isinstance(name, str) or not name.isidentifier():
+            raise WorkflowError("输入名称必须是合法标识符")
+        input_names.append(name)
+    if len(input_names) != len(set(input_names)):
+        raise WorkflowError("输入名称不能重复")
     if sum(1 for node in nodes if node["type"] == "start") != 1:
         raise WorkflowError("必须有且只有一个 start")
     if not any(node["type"] == "end" for node in nodes):
@@ -156,6 +168,9 @@ def dry_run(workflow: dict) -> dict:
 def execute(workflow: dict, inputs: dict | None = None, transport=None, resolver=None, approvals=None, prior=None, provider=None) -> dict:
     validate(workflow)
     context = dict(inputs or {})
+    for item in workflow.get("inputs") or []:
+        if item.get("required") and item["name"] not in context:
+            raise WorkflowError(f"缺少必填输入 {item['name']}")
     _context_size(context)
     nodes = {node["id"]: node for node in workflow["nodes"]}
     outgoing = defaultdict(list)
@@ -311,13 +326,29 @@ def _default_resolver(host: str):
     return [item[4][0] for item in socket.getaddrinfo(host, None)]
 
 
+def _redact_text(text: str) -> str:
+    text = re.sub(r"ghp_[A-Za-z0-9]{20,}", "[REDACTED_TOKEN]", text)
+    text = re.sub(r"github_pat_[A-Za-z0-9_]+", "[REDACTED_TOKEN]", text)
+    return text
+
+
+def _redact_value(value):
+    if isinstance(value, str):
+        return _redact_text(value)
+    if isinstance(value, list):
+        return [_redact_value(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _redact_value(item) for key, item in value.items()}
+    return value
+
+
 def _result(workflow, status, states, logs, context, attempts, error, paused_at=None) -> dict:
     return {
         "name": workflow["name"],
         "status": status,
         "states": states,
-        "logs": logs,
-        "context": context,
+        "logs": _redact_value(logs),
+        "context": _redact_value(context),
         "attempts": attempts,
         "error": error,
         "paused_at": paused_at,

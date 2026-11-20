@@ -7,7 +7,7 @@ import uuid
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
-from workflow_hub.engine import SecurityError, WorkflowError, execute, parse_workflow
+from workflow_hub.engine import SecurityError, WorkflowError, dry_run, execute, parse_workflow
 
 
 class WorkflowIn(BaseModel):
@@ -34,6 +34,14 @@ def create_app() -> FastAPI:
         except (WorkflowError, SecurityError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return {"name": workflow["name"], "nodes": len(workflow["nodes"])}
+
+    @app.post("/api/workflows/dry-run")
+    def plan(body: WorkflowIn):
+        try:
+            workflow = parse_workflow(body.yaml)
+        except (WorkflowError, SecurityError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return dry_run(workflow)
 
     @app.post("/api/runs")
     def start(body: WorkflowIn):
