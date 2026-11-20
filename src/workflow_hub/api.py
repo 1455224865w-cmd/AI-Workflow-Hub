@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from workflow_hub.engine import SecurityError, WorkflowError, dry_run, execute, parse_workflow
+from workflow_hub.i18n import install, negotiate, translate_payload
+from workflow_hub.mcp_server import mount
 from workflow_hub.store import RunStore
 
 
@@ -21,7 +23,9 @@ class ResumeIn(BaseModel):
 
 
 def create_app(db_path: str | None = None) -> FastAPI:
-    app = FastAPI(title="AI Workflow Hub", version="0.1.0")
+    app = FastAPI(title="AI Workflow Hub", version="0.1.6")
+    install(app)
+    mount(app)
     app.state.runs = {}
     app.state.store = RunStore(db_path) if db_path else None
 
@@ -59,7 +63,7 @@ def create_app(db_path: str | None = None) -> FastAPI:
         return dry_run(workflow)
 
     @app.post("/api/runs")
-    def start(body: WorkflowIn):
+    def start(body: WorkflowIn, request: Request):
         try:
             workflow = parse_workflow(body.yaml)
             result = execute(workflow, body.inputs, resolver=lambda host: ["93.184.216.34"])
@@ -67,10 +71,10 @@ def create_app(db_path: str | None = None) -> FastAPI:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         run_id = uuid.uuid4().hex
         remember(run_id, {"workflow": workflow, "inputs": body.inputs, "result": result})
-        return {"id": run_id, "result": result}
+        return translate_payload({"id": run_id, "result": result}, negotiate(request.headers.get("accept-language"), request.query_params.get("lang")))
 
     @app.post("/api/runs/{run_id}/resume")
-    def resume(run_id: str, body: ResumeIn):
+    def resume(run_id: str, body: ResumeIn, request: Request):
         saved = load(run_id)
         if saved is None:
             raise HTTPException(status_code=404, detail="运行记录不存在")
@@ -91,7 +95,7 @@ def create_app(db_path: str | None = None) -> FastAPI:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         saved["result"] = result
         remember(run_id, saved)
-        return {"id": run_id, "result": result}
+        return translate_payload({"id": run_id, "result": result}, negotiate(request.headers.get("accept-language"), request.query_params.get("lang")))
 
     return app
 

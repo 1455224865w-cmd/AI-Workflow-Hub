@@ -41,3 +41,7 @@ YAML 校验、条件、受限 script、HTTP 防护、重试、超时、审批暂
 ## 0.1.5
 
 接口可以把运行记录保存到 SQLite。PostgreSQL 仍未接入。
+
+## 0.1.6
+
+Spring AI 通过 MCP 做空跑。空跑不访问网络。
