@@ -1,0 +1,12 @@
+name: approval-demo
+version: 1
+nodes:
+  - id: start
+    type: start
+  - id: review
+    type: approval
+  - id: end
+    type: end
+edges:
+  - {from: start, to: review}
+  - {from: review, to: end}
